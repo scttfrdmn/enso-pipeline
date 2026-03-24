@@ -11,11 +11,10 @@ function uid() {
 
 // Verify either Clerk session (browser) or service token (Signal Scout)
 async function authorize(req: NextRequest): Promise<string | null> {
-  // Service-to-service: Bearer token
-  const authHeader = req.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.slice(7);
-    if (token === process.env.PIPELINE_API_SECRET) {
+  // Service-to-service: custom API key header (avoids Clerk Bearer token interception)
+  const apiKey = req.headers.get("x-api-key");
+  if (apiKey) {
+    if (apiKey === process.env.PIPELINE_API_SECRET) {
       return "signal-scout";
     }
     return null;

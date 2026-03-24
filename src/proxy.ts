@@ -4,9 +4,9 @@ import { NextResponse } from "next/server";
 const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/unauthorized"])
 
 export default clerkMiddleware(async (auth, req) => {
-  // Service-to-service Bearer token requests bypass Clerk entirely;
-  // the route handler validates the token itself.
-  if (req.headers.get("authorization")?.startsWith("Bearer ")) {
+  // Service-to-service requests using X-Api-Key bypass Clerk entirely;
+  // the route handler validates the key itself.
+  if (req.headers.get("x-api-key")) {
     return NextResponse.next();
   }
 
