@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { ClerkProvider } from '@clerk/nextjs'
+import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -23,7 +24,7 @@ export default function RootLayout({
             rel="stylesheet"
           />
         </head>
-        <body style={{ fontFamily: "'DM Mono', monospace" }}>{children}</body>
+        <body style={{ fontFamily: "'DM Mono', monospace" }}>{children}<Analytics /></body>
       </html>
     </ClerkProvider>
   )
