@@ -1,4 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
+
+const ALLOWED_DOMAIN = "playgroundlogic.co";
 
 // Allow service-to-service POST to /api/opportunities (authenticated via Bearer token in the handler)
 const isPublicRoute = createRouteMatcher([
@@ -8,8 +11,15 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
-  if (!isPublicRoute(req)) {
-    await auth.protect();
+  if (isPublicRoute(req)) return;
+
+  const { sessionClaims } = await auth.protect();
+
+  const email = (sessionClaims?.email as string) ?? "";
+  if (!email.endsWith(`@${ALLOWED_DOMAIN}`)) {
+    const signInUrl = new URL("/sign-in", req.url);
+    signInUrl.searchParams.set("error", "unauthorized");
+    return NextResponse.redirect(signInUrl);
   }
 });
 
