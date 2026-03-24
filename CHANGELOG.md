@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-23
+
+### Added
+- Loading skeleton (5 animated cards) replaces "Loading..." text on initial fetch (closes #10)
+- Error banner above opportunity list when initial fetch fails (closes #4)
+- Inline error messages on create/update/delete failures (closes #4)
+- `usePipeline` hook now exposes `error` state and throws on CRUD failures
+
+### Known Issues
+- Ably real-time not verified end-to-end (#2)
+- Scout → Pipeline integration not verified end-to-end (#6)
+
 ## [0.1.0] - 2026-03-23
 
 ### Fixed
