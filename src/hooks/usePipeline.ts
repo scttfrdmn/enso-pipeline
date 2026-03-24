@@ -6,13 +6,20 @@ import type { Opportunity } from '@/lib/db/schema'
 export function usePipeline() {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   // Initial fetch
   useEffect(() => {
     fetch('/api/opportunities')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
       .then(data => { setOpportunities(data); setLoading(false) })
-      .catch(() => setLoading(false))
+      .catch(() => {
+        setError('Failed to load opportunities. Refresh to retry.')
+        setLoading(false)
+      })
   }, [])
 
   // Ably real-time subscription
@@ -41,6 +48,7 @@ export function usePipeline() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
     return res.json()
   }, [])
 
@@ -50,12 +58,14 @@ export function usePipeline() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
     return res.json()
   }, [])
 
   const deleteOpportunity = useCallback(async (id: string) => {
-    await fetch(`/api/opportunities/${id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/opportunities/${id}`, { method: 'DELETE' })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
   }, [])
 
-  return { opportunities, loading, createOpportunity, updateOpportunity, deleteOpportunity }
+  return { opportunities, loading, error, createOpportunity, updateOpportunity, deleteOpportunity }
 }

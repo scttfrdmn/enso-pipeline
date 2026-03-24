@@ -1085,12 +1085,13 @@ function AddModal({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PipelinePage() {
-  const { opportunities, loading, createOpportunity, updateOpportunity, deleteOpportunity } = usePipeline()
+  const { opportunities, loading, error, createOpportunity, updateOpportunity, deleteOpportunity } = usePipeline()
   const { user } = useUser()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [filterStage, setFilterStage] = useState<string>('All')
   const [search, setSearch] = useState('')
+  const [crudError, setCrudError] = useState<string | null>(null)
 
   const selected = opportunities.find(o => o.id === selectedId) ?? null
 
@@ -1124,6 +1125,7 @@ export default function PipelinePage() {
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <style>{`@keyframes skeleton-pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.5 } }`}</style>
       {/* Header */}
       <header
         style={{
@@ -1336,27 +1338,43 @@ export default function PipelinePage() {
             </div>
           )}
 
+          {/* Error banners */}
+          {(error || crudError) && (
+            <div style={{
+              margin: '8px 12px 0',
+              padding: '8px 12px',
+              background: 'rgba(160,40,0,0.06)',
+              border: '1px solid rgba(160,40,0,0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+            }}>
+              <span style={{ fontSize: 9, color: '#8c2200', fontFamily: "'DM Mono', monospace", letterSpacing: '0.12em' }}>
+                {error ?? crudError}
+              </span>
+              <button
+                onClick={() => setCrudError(null)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8c2200', fontSize: 14, lineHeight: 1, padding: '0 2px' }}
+              >×</button>
+            </div>
+          )}
+
           {/* List */}
           {loading ? (
-            <div
-              style={{
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 9,
-                  color: '#8a7e78',
-                  fontFamily: "'DM Mono', monospace",
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.18em',
-                }}
-              >
-                Loading...
-              </span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1, padding: '8px 12px', flex: 1 }}>
+              {[...Array(5)].map((_, i) => (
+                <div key={i} style={{
+                  background: '#f0ede9',
+                  border: '1px solid #e0dcd8',
+                  padding: '14px 18px',
+                  animation: 'skeleton-pulse 1.4s ease-in-out infinite',
+                  animationDelay: `${i * 0.1}s`,
+                }}>
+                  <div style={{ height: 10, background: '#e0dcd8', borderRadius: 2, marginBottom: 8, width: '60%' }} />
+                  <div style={{ height: 8, background: '#e0dcd8', borderRadius: 2, width: '40%' }} />
+                </div>
+              ))}
             </div>
           ) : filtered.length === 0 ? (
             <div
@@ -1428,8 +1446,24 @@ export default function PipelinePage() {
             <DetailPanel
               opp={selected}
               onClose={() => setSelectedId(null)}
-              onUpdate={updateOpportunity}
-              onDelete={deleteOpportunity}
+              onUpdate={async (id, data) => {
+                try {
+                  setCrudError(null)
+                  return await updateOpportunity(id, data)
+                } catch {
+                  setCrudError('Failed to save changes. Please try again.')
+                  throw new Error('update failed')
+                }
+              }}
+              onDelete={async (id) => {
+                try {
+                  setCrudError(null)
+                  await deleteOpportunity(id)
+                  setSelectedId(null)
+                } catch {
+                  setCrudError('Failed to delete opportunity. Please try again.')
+                }
+              }}
             />
           </aside>
         )}
@@ -1439,7 +1473,14 @@ export default function PipelinePage() {
       {showAdd && (
         <AddModal
           onClose={() => setShowAdd(false)}
-          onCreate={createOpportunity}
+          onCreate={async (data) => {
+            try {
+              setCrudError(null)
+              return await createOpportunity(data)
+            } catch {
+              setCrudError('Failed to create opportunity. Please try again.')
+            }
+          }}
           defaultSponsor={defaultSponsor}
         />
       )}
