@@ -627,24 +627,14 @@ function DetailPanel({
           </div>
         </div>
 
-        {/* Why ENSO */}
-        <div style={sectionStyle}>
-          <FieldLabel>Why ENSO</FieldLabel>
-          <EditableField
-            value={opp.source ?? ''}
-            onChange={v => save({ source: v })}
-            multiline
-            placeholder="Why is this a good fit for ENSO?"
-          />
-        </div>
-
         {/* Source */}
         <div style={sectionStyle}>
           <FieldLabel>Source</FieldLabel>
           <EditableField
-            value={opp.entrySource ?? ''}
-            onChange={v => save({ entrySource: v })}
-            placeholder="How did we find this?"
+            value={opp.source ?? ''}
+            onChange={v => save({ source: v })}
+            multiline
+            placeholder="Publication, headline, URL..."
           />
         </div>
 
