@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
-import { opportunities, type NewOpportunity } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { opportunities, activityLog, type NewOpportunity } from "@/lib/db/schema";
+import { eq, sql } from "drizzle-orm";
 import { publishEvent } from "@/lib/realtime";
 
 function uid() {
@@ -26,12 +26,18 @@ async function authorize(req: NextRequest): Promise<string | null> {
 }
 
 export async function GET(req: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const caller = await authorize(req);
+  if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const stage = req.nextUrl.searchParams.get("stage");
+  const company = req.nextUrl.searchParams.get("company");
+
   const all = await db.query.opportunities.findMany({
-    where: stage ? eq(opportunities.stage, stage as any) : undefined,
+    where: stage
+      ? eq(opportunities.stage, stage as any)
+      : company
+      ? sql`LOWER(${opportunities.companyName}) = LOWER(${company})`
+      : undefined,
     orderBy: (o, { desc }) => [desc(o.createdAt)],
   });
 
@@ -46,6 +52,18 @@ export async function POST(req: NextRequest) {
 
   if (!body.companyName) {
     return NextResponse.json({ error: "companyName is required" }, { status: 400 });
+  }
+
+  // Duplicate detection: check for existing company (case-insensitive)
+  const [existing] = await db.query.opportunities.findMany({
+    where: sql`LOWER(${opportunities.companyName}) = LOWER(${body.companyName})`,
+    limit: 1,
+  });
+  if (existing) {
+    return NextResponse.json(
+      { error: "duplicate", existing: { id: existing.id, companyName: existing.companyName, stage: existing.stage } },
+      { status: 409 }
+    );
   }
 
   const opp: NewOpportunity = {
@@ -63,6 +81,19 @@ export async function POST(req: NextRequest) {
   };
 
   const [created] = await db.insert(opportunities).values(opp).returning();
+
+  // Log activity
+  let userEmail = "signal-scout@system";
+  if (caller !== "signal-scout") {
+    const user = await currentUser();
+    userEmail = user?.emailAddresses?.[0]?.emailAddress ?? "unknown@system";
+  }
+  await db.insert(activityLog).values({
+    id: uid(),
+    opportunityId: created.id,
+    userEmail,
+    action: "created",
+  });
 
   await publishEvent("opportunity:created", created);
 

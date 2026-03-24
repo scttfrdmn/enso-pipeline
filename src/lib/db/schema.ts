@@ -6,6 +6,19 @@ import {
   pgEnum,
 } from "drizzle-orm/pg-core";
 
+export const activityLog = pgTable("activity_log", {
+  id: text("id").primaryKey(),
+  opportunityId: text("opportunity_id").notNull(),
+  userEmail: text("user_email").notNull(),
+  action: text("action").notNull(), // "created" | "updated" | "deleted"
+  field: text("field"), // field name for "updated" actions
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ActivityLogEntry = typeof activityLog.$inferSelect;
+
 export const stageEnum = pgEnum("stage", [
   "Sparks",
   "Evaluating",
@@ -48,6 +61,8 @@ export const opportunities = pgTable("opportunities", {
   swarmNotes: text("swarm_notes"),
   nextActions: jsonb("next_actions").$type<NextAction[]>().default([]).notNull(),
 
+  stageEnteredAt: timestamp("stage_entered_at").defaultNow(),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -60,4 +75,5 @@ export type NextAction = {
   action: string;
   owner: string;
   completedAt?: string;
+  dueAt?: string; // ISO date string e.g. "2026-04-15"
 };

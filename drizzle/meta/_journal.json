@@ -8,6 +8,13 @@
       "when": 1774321835817,
       "tag": "0000_nebulous_johnny_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1774334586263,
+      "tag": "0001_glossy_norrin_radd",
+      "breakpoints": true
     }
   ]
 }

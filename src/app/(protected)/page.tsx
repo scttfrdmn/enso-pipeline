@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useUser, UserButton } from '@clerk/nextjs'
 import { usePipeline } from '@/hooks/usePipeline'
+import type { Notification } from '@/hooks/usePipeline'
 import type { Opportunity, NextAction } from '@/lib/db/schema'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -296,6 +297,14 @@ function OpportunityCard({
             {opp.sponsor}
           </div>
         )}
+        {opp.stageEnteredAt && (() => {
+          const days = Math.floor((Date.now() - new Date(opp.stageEnteredAt).getTime()) / 86400000)
+          return days > 0 ? (
+            <div style={{ fontSize: 8, color: '#b0a8a0', whiteSpace: 'nowrap', fontFamily: "'DM Mono', monospace" }}>
+              {days}d in stage
+            </div>
+          ) : null
+        })()}
         <div style={{ fontSize: 8, color: '#8a7e78', whiteSpace: 'nowrap' }}>
           {formatDate(opp.createdAt)}
         </div>
@@ -380,6 +389,34 @@ function StageStrip({
 
 // ─── DetailPanel ─────────────────────────────────────────────────────────────
 
+type ActivityLogEntry = {
+  id: string
+  opportunityId: string
+  userEmail: string
+  action: string
+  field: string | null
+  oldValue: string | null
+  newValue: string | null
+  createdAt: string
+}
+
+function daysAgo(d: Date | string | null | undefined): number | null {
+  if (!d) return null
+  const ms = Date.now() - new Date(d).getTime()
+  return Math.floor(ms / 86400000)
+}
+
+function formatRelative(d: Date | string | null | undefined): string {
+  if (!d) return ''
+  const ms = Date.now() - new Date(d).getTime()
+  const mins = Math.floor(ms / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
+
 function DetailPanel({
   opp,
   onClose,
@@ -393,9 +430,14 @@ function DetailPanel({
 }) {
   const [newAction, setNewAction] = useState('')
   const [newActionOwner, setNewActionOwner] = useState('')
+  const [newActionDueAt, setNewActionDueAt] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [showActivity, setShowActivity] = useState(false)
+  const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([])
+  const [activityLoading, setActivityLoading] = useState(false)
 
   const actions: NextAction[] = Array.isArray(opp.nextActions) ? opp.nextActions : []
+  const today = new Date().toISOString().slice(0, 10)
 
   function save(data: Partial<Opportunity>) {
     onUpdate(opp.id, data)
@@ -405,11 +447,17 @@ function DetailPanel({
     if (!newAction.trim()) return
     const updated: NextAction[] = [
       ...actions,
-      { id: uid(), action: newAction.trim(), owner: newActionOwner.trim() },
+      {
+        id: uid(),
+        action: newAction.trim(),
+        owner: newActionOwner.trim(),
+        ...(newActionDueAt ? { dueAt: newActionDueAt } : {}),
+      },
     ]
     save({ nextActions: updated })
     setNewAction('')
     setNewActionOwner('')
+    setNewActionDueAt('')
   }
 
   function handleRemoveAction(id: string) {
@@ -420,6 +468,25 @@ function DetailPanel({
     await onDelete(opp.id)
     onClose()
   }
+
+  async function toggleActivity() {
+    if (!showActivity) {
+      setShowActivity(true)
+      if (activityLog.length === 0) {
+        setActivityLoading(true)
+        try {
+          const res = await fetch(`/api/opportunities/${opp.id}/activity`)
+          if (res.ok) setActivityLog(await res.json())
+        } finally {
+          setActivityLoading(false)
+        }
+      }
+    } else {
+      setShowActivity(false)
+    }
+  }
+
+  const daysInStage = daysAgo(opp.stageEnteredAt)
 
   const selectStyle: React.CSSProperties = {
     fontFamily: "'DM Mono', monospace",
@@ -522,6 +589,11 @@ function DetailPanel({
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
+          {daysInStage !== null && (
+            <div style={{ fontSize: 8, color: '#8a7e78', fontFamily: "'DM Mono', monospace", marginTop: 3 }}>
+              {daysInStage === 0 ? 'Entered today' : `${daysInStage} day${daysInStage === 1 ? '' : 's'} in ${opp.stage}`}
+            </div>
+          )}
         </div>
 
         {/* Scout Summary */}
@@ -617,42 +689,52 @@ function DetailPanel({
 
           {actions.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 6 }}>
-              {actions.map(a => (
-                <div
-                  key={a.id}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    background: '#f7f5f2',
-                    border: '1px solid #d4d0cb',
-                    padding: '6px 8px',
-                    gap: 8,
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 11, color: '#1a1a1a', lineHeight: 1.5 }}>{a.action}</div>
-                    {a.owner && (
-                      <div style={{ fontSize: 9, color: '#8a7e78', marginTop: 2 }}>→ {a.owner}</div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => handleRemoveAction(a.id)}
+              {actions.map(a => {
+                const overdue = a.dueAt && a.dueAt < today
+                return (
+                  <div
+                    key={a.id}
                     style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      color: '#8a7e78',
-                      fontSize: 14,
-                      lineHeight: 1,
-                      padding: '0 2px',
-                      flexShrink: 0,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      background: overdue ? '#fff5f2' : '#f7f5f2',
+                      border: overdue ? '1px solid #f0c0b0' : '1px solid #d4d0cb',
+                      padding: '6px 8px',
+                      gap: 8,
                     }}
                   >
-                    ×
-                  </button>
-                </div>
-              ))}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 11, color: '#1a1a1a', lineHeight: 1.5 }}>{a.action}</div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
+                        {a.owner && (
+                          <span style={{ fontSize: 9, color: '#8a7e78' }}>→ {a.owner}</span>
+                        )}
+                        {a.dueAt && (
+                          <span style={{ fontSize: 9, color: overdue ? '#e8490f' : '#8a7e78' }}>
+                            {overdue ? '⚠ ' : ''}due {a.dueAt}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleRemoveAction(a.id)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#8a7e78',
+                        fontSize: 14,
+                        lineHeight: 1,
+                        padding: '0 2px',
+                        flexShrink: 0,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           )}
 
@@ -689,6 +771,23 @@ function DetailPanel({
                   color: '#1a1a1a',
                   outline: 'none',
                   flex: 1,
+                }}
+              />
+              <input
+                type="date"
+                value={newActionDueAt}
+                onChange={e => setNewActionDueAt(e.target.value)}
+                title="Due date (optional)"
+                style={{
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: 10,
+                  border: '1px solid #ccc8c2',
+                  padding: '5px 5px',
+                  background: '#f0ede9',
+                  color: '#8a7e78',
+                  outline: 'none',
+                  width: 110,
+                  flexShrink: 0,
                 }}
               />
               <button
@@ -736,6 +835,52 @@ function DetailPanel({
               <div style={{ fontSize: 9, color: '#3a3530' }}>{opp.companyType || '—'}</div>
             </div>
           </div>
+        </div>
+
+        <div style={separatorStyle} />
+
+        {/* Activity Log */}
+        <div style={sectionStyle}>
+          <button
+            onClick={toggleActivity}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <FieldLabel>{showActivity ? '▾' : '▸'} Activity</FieldLabel>
+          </button>
+          {showActivity && (
+            <div style={{ marginTop: 4 }}>
+              {activityLoading ? (
+                <div style={{ fontSize: 9, color: '#8a7e78', fontFamily: "'DM Mono', monospace" }}>Loading...</div>
+              ) : activityLog.length === 0 ? (
+                <div style={{ fontSize: 9, color: '#8a7e78', fontFamily: "'DM Mono', monospace" }}>No activity recorded yet.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {activityLog.map(entry => (
+                    <div key={entry.id} style={{ fontSize: 9, color: '#3a3530', fontFamily: "'DM Mono', monospace", lineHeight: 1.6 }}>
+                      <span style={{ color: '#1a1a1a' }}>{entry.userEmail}</span>
+                      {entry.action === 'created' && ' created this opportunity'}
+                      {entry.action === 'deleted' && ' deleted this opportunity'}
+                      {entry.action === 'updated' && entry.field && (
+                        <> changed <span style={{ color: '#2a5db0' }}>{entry.field}</span>
+                        {entry.oldValue !== undefined && entry.newValue !== undefined && entry.field !== 'nextActions' && (
+                          <> from <em>{entry.oldValue || '—'}</em> → <em>{entry.newValue || '—'}</em></>
+                        )}</>
+                      )}
+                      <span style={{ color: '#8a7e78', marginLeft: 6 }}>— {formatRelative(entry.createdAt)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div style={separatorStyle} />
@@ -1085,13 +1230,45 @@ function AddModal({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PipelinePage() {
-  const { opportunities, loading, error, createOpportunity, updateOpportunity, deleteOpportunity } = usePipeline()
+  const { opportunities, loading, error, notifications, markAllRead, createOpportunity, updateOpportunity, deleteOpportunity } = usePipeline()
   const { user } = useUser()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [filterStage, setFilterStage] = useState<string>('All')
   const [search, setSearch] = useState('')
   const [crudError, setCrudError] = useState<string | null>(null)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const notifRef = useRef<HTMLDivElement>(null)
+
+  const unreadCount = notifications.filter(n => !n.read).length
+
+  // Close notification dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setShowNotifications(false)
+      }
+    }
+    if (showNotifications) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showNotifications])
+
+  function exportCSV() {
+    const cols = ['Company', 'Stage', 'Type', 'Sector', 'Sponsor', 'Scout Summary', 'Decision Maker', 'Source', 'Entry Source', 'Created', 'Updated']
+    const rows = filtered.map(o => [
+      o.companyName, o.stage, o.companyType ?? '', o.sector ?? '', o.sponsor ?? '',
+      o.scoutSummary ?? '', o.decisionMaker ?? '', o.source ?? '', o.entrySource,
+      new Date(o.createdAt).toISOString().slice(0, 10),
+      new Date(o.updatedAt).toISOString().slice(0, 10),
+    ])
+    const csv = [cols, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `enso-pipeline-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
 
   const selected = opportunities.find(o => o.id === selectedId) ?? null
 
@@ -1201,6 +1378,88 @@ export default function PipelinePage() {
           >
             feedback
           </a>
+          {/* Notifications bell */}
+          <div ref={notifRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => { setShowNotifications(v => !v); if (unreadCount > 0) markAllRead() }}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '2px 4px',
+                position: 'relative',
+                fontSize: 14,
+                lineHeight: 1,
+                color: unreadCount > 0 ? '#e8490f' : '#8a7e78',
+              }}
+              title="Notifications"
+            >
+              &#x1F514;
+              {unreadCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: -2,
+                  right: -2,
+                  background: '#e8490f',
+                  color: '#fff',
+                  borderRadius: '50%',
+                  width: 14,
+                  height: 14,
+                  fontSize: 8,
+                  fontFamily: "'DM Mono', monospace",
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  lineHeight: 1,
+                }}>
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+            {showNotifications && (
+              <div style={{
+                position: 'absolute',
+                right: 0,
+                top: '100%',
+                marginTop: 6,
+                width: 300,
+                background: '#fff',
+                border: '1px solid #d4d0cb',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
+                zIndex: 100,
+                maxHeight: 320,
+                overflowY: 'auto',
+              }}>
+                {notifications.length === 0 ? (
+                  <div style={{ padding: '16px', fontSize: 9, color: '#8a7e78', fontFamily: "'DM Mono', monospace", textAlign: 'center' }}>
+                    No notifications yet
+                  </div>
+                ) : (
+                  notifications.map(n => (
+                    <button
+                      key={n.id}
+                      onClick={() => { setSelectedId(n.opportunityId); setShowNotifications(false) }}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '10px 12px',
+                        background: n.read ? 'transparent' : '#fff5f2',
+                        border: 'none',
+                        borderBottom: '1px solid #f0ede9',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{ fontSize: 10, color: '#1a1a1a', fontFamily: "'DM Mono', monospace" }}>{n.detail}</div>
+                      <div style={{ fontSize: 8, color: '#8a7e78', fontFamily: "'DM Mono', monospace", marginTop: 2 }}>
+                        {new Date(n.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
           <UserButton />
         </div>
       </header>
@@ -1227,6 +1486,25 @@ export default function PipelinePage() {
             overflowY: 'auto',
           }}
         >
+          {/* Export */}
+          <button
+            onClick={exportCSV}
+            style={{
+              background: 'transparent',
+              color: '#8a7e78',
+              border: '1px solid #d4d0cb',
+              width: '100%',
+              padding: '7px 8px',
+              fontSize: 8,
+              fontFamily: "'DM Mono', monospace",
+              textTransform: 'uppercase',
+              letterSpacing: '0.14em',
+              cursor: 'pointer',
+            }}
+          >
+            ↓ Export CSV
+          </button>
+
           {/* Search */}
           <input
             value={search}
