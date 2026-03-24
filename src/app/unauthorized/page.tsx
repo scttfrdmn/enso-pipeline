@@ -20,7 +20,7 @@ export default function UnauthorizedPage() {
             fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: '0.16em',
             textTransform: 'uppercase', cursor: 'pointer',
           }}>
-            Sign Out
+            Sign Out & Try Again
           </button>
         </SignOutButton>
       </div>

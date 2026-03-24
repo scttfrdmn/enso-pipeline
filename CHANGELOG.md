@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Removed debug email display from /unauthorized page
+- Removed /sign-up from public proxy routes (no sign-up page exists)
+
 ### Known Issues
 - Ably real-time not verified end-to-end
 - Scout → Pipeline integration not verified end-to-end
