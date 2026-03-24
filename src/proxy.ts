@@ -1,5 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest, type NextFetchEvent } from "next/server";
 
 const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/unauthorized"])
 
@@ -11,7 +11,7 @@ const clerkHandler = clerkMiddleware(async (auth, req) => {
   }
 })
 
-export default function proxy(req: NextRequest, event: unknown) {
+export default function proxy(req: NextRequest, event: NextFetchEvent) {
   // Service-to-service requests: let the route handler validate the key
   if (req.headers.get("x-api-key")) {
     return NextResponse.next();
