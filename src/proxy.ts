@@ -1,9 +1,15 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
-// /api/opportunities accepts Bearer token from Signal Scout (auth handled in the route handler)
-const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/unauthorized", "/api/opportunities(.*)"])
+const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/unauthorized"])
 
 export default clerkMiddleware(async (auth, req) => {
+  // Service-to-service Bearer token requests bypass Clerk entirely;
+  // the route handler validates the token itself.
+  if (req.headers.get("authorization")?.startsWith("Bearer ")) {
+    return NextResponse.next();
+  }
+
   if (!isPublicRoute(req)) {
     await auth.protect()
   }
