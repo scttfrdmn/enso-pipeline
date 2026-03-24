@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-03-23
+
+### Fixed
+- Switch service auth from `Authorization: Bearer` to `X-Api-Key` header — Clerk v7 intercepts Bearer tokens before route handlers run
+- Bypass `clerkMiddleware` entirely for `X-Api-Key` requests in proxy to prevent Clerk dev-instance handshake interception
+- Fix trailing `\n` in `PIPELINE_API_SECRET` Vercel env var that caused all service auth to fail
+
 ## [0.3.0] - 2026-03-23
 
 ### Added
