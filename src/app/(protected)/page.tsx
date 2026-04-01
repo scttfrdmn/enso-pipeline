@@ -4,6 +4,17 @@ import { useUser, UserButton } from '@clerk/nextjs'
 import { usePipeline } from '@/hooks/usePipeline'
 import type { Notification } from '@/hooks/usePipeline'
 import type { Opportunity, NextAction } from '@/lib/db/schema'
+import dynamic from 'next/dynamic'
+
+const RichTextField = dynamic(
+  () => import('@/components/RichTextField'),
+  {
+    ssr: false,
+    loading: () => (
+      <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, background: '#f0ede9', border: '1px solid #ccc8c2', padding: '5px 7px', minHeight: 120, lineHeight: 1.6 }} />
+    ),
+  }
+)
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -171,88 +182,6 @@ function EditableField({
   )
 }
 
-// ─── RichTextField ────────────────────────────────────────────────────────────
-
-function RichTextField({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string
-  onChange: (v: string) => void
-  placeholder?: string
-}) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(value)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-
-  useEffect(() => {
-    if (!editing) setDraft(value)
-  }, [value, editing])
-
-  useEffect(() => {
-    if (editing && textareaRef.current) {
-      textareaRef.current.focus()
-      const len = textareaRef.current.value.length
-      textareaRef.current.selectionStart = len
-      textareaRef.current.selectionEnd = len
-    }
-  }, [editing])
-
-  function handleBlur() {
-    setEditing(false)
-    if (draft !== value) onChange(draft)
-  }
-
-  if (editing) {
-    return (
-      <textarea
-        ref={textareaRef}
-        value={draft}
-        onChange={e => setDraft(e.target.value)}
-        onBlur={handleBlur}
-        placeholder={placeholder}
-        style={{
-          fontFamily: "'DM Mono', monospace",
-          fontSize: 11,
-          color: '#1a1a1a',
-          background: '#f0ede9',
-          border: '1px solid #ccc8c2',
-          padding: '5px 7px',
-          width: '100%',
-          outline: 'none',
-          resize: 'vertical',
-          lineHeight: 1.6,
-          minHeight: 120,
-          boxSizing: 'border-box',
-          display: 'block',
-        }}
-      />
-    )
-  }
-
-  return (
-    <div
-      onClick={() => setEditing(true)}
-      style={{
-        fontFamily: "'DM Mono', monospace",
-        fontSize: 11,
-        color: value ? '#1a1a1a' : '#b0a8a0',
-        fontStyle: value ? 'normal' : 'italic',
-        padding: '5px 7px',
-        border: '1px solid transparent',
-        cursor: 'text',
-        lineHeight: 1.6,
-        minHeight: 120,
-        background: 'transparent',
-        whiteSpace: 'pre-wrap',
-      }}
-    >
-      {value || placeholder || '—'}
-    </div>
-  )
-}
-
 // ─── FieldLabel ───────────────────────────────────────────────────────────────
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
@@ -340,7 +269,7 @@ function OpportunityCard({
               WebkitBoxOrient: 'vertical',
             }}
           >
-            {opp.scoutSummary}
+            {opp.scoutSummary.replace(/<[^>]+>/g, '')}
           </div>
         )}
       </div>
@@ -1319,7 +1248,7 @@ export default function PipelinePage() {
     const cols = ['Company', 'Stage', 'Type', 'Sector', 'Sponsor', 'Scout Summary', 'Decision Maker', 'Source', 'Entry Source', 'Created', 'Updated']
     const rows = filtered.map(o => [
       o.companyName, o.stage, o.companyType ?? '', o.sector ?? '', o.sponsor ?? '',
-      o.scoutSummary ?? '', o.decisionMaker ?? '', o.source ?? '', o.entrySource,
+      (o.scoutSummary ?? '').replace(/<[^>]+>/g, ''), o.decisionMaker ?? '', (o.source ?? '').replace(/<[^>]+>/g, ''), o.entrySource,
       new Date(o.createdAt).toISOString().slice(0, 10),
       new Date(o.updatedAt).toISOString().slice(0, 10),
     ])
