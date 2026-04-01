@@ -4,6 +4,9 @@ import { useUser, UserButton } from '@clerk/nextjs'
 import { usePipeline } from '@/hooks/usePipeline'
 import type { Notification } from '@/hooks/usePipeline'
 import type { Opportunity, NextAction } from '@/lib/db/schema'
+import { useEditor, EditorContent } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import Underline from '@tiptap/extension-underline'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -129,21 +132,11 @@ function EditableField({
     lineHeight: 1.6,
   }
 
+  if (multiline) {
+    return <RichTextField value={value} onChange={onChange} placeholder={placeholder} />
+  }
+
   if (editing) {
-    if (multiline) {
-      return (
-        <textarea
-          ref={inputRef as React.RefObject<HTMLTextAreaElement>}
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          onBlur={handleBlur}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          rows={4}
-          style={sharedStyle}
-        />
-      )
-    }
     return (
       <input
         ref={inputRef as React.RefObject<HTMLInputElement>}
@@ -169,14 +162,136 @@ function EditableField({
         border: '1px solid transparent',
         cursor: 'text',
         lineHeight: 1.6,
-        minHeight: multiline ? 64 : 28,
-        whiteSpace: multiline ? 'pre-wrap' : 'nowrap',
-        overflow: multiline ? 'visible' : 'hidden',
-        textOverflow: multiline ? 'clip' : 'ellipsis',
+        minHeight: 28,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
         background: 'transparent',
       }}
     >
       {draft || placeholder || '—'}
+    </div>
+  )
+}
+
+// ─── RichTextField ────────────────────────────────────────────────────────────
+
+function RichTextField({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+}) {
+  const [editing, setEditing] = useState(false)
+
+  const editor = useEditor({
+    extensions: [StarterKit, Underline],
+    content: value,
+    editorProps: {
+      attributes: {
+        style: [
+          "font-family:'DM Mono',monospace",
+          'font-size:11px',
+          'color:#1a1a1a',
+          'background:#f0ede9',
+          'border:1px solid #ccc8c2',
+          'padding:5px 7px',
+          'min-height:120px',
+          'outline:none',
+          'line-height:1.6',
+          'width:100%',
+          'box-sizing:border-box',
+        ].join(';'),
+      },
+    },
+    onBlur: ({ editor }) => {
+      setEditing(false)
+      const html = editor.getHTML()
+      const normalised = html === '<p></p>' ? '' : html
+      if (normalised !== value) onChange(normalised)
+    },
+  })
+
+  // Sync external value changes (e.g. Ably real-time updates) into the editor
+  useEffect(() => {
+    if (editor && !editing) {
+      if (editor.getHTML() !== value) {
+        editor.commands.setContent(value || '', { emitUpdate: false })
+      }
+    }
+  }, [value, editor, editing])
+
+  // Focus at end when entering edit mode
+  useEffect(() => {
+    if (editing && editor) {
+      editor.commands.focus('end')
+    }
+  }, [editing, editor])
+
+  const MARKS = [
+    { mark: 'bold',      label: 'B', extraStyle: { fontWeight: 'bold' as const } },
+    { mark: 'italic',    label: 'I', extraStyle: { fontStyle: 'italic' as const } },
+    { mark: 'underline', label: 'U', extraStyle: { textDecoration: 'underline' as const } },
+  ]
+
+  return (
+    <div style={{ position: 'relative' }}>
+      {editing && editor && (
+        <div style={{ display: 'flex', background: '#fff', border: '1px solid #d4d0cb', borderBottom: 'none', boxShadow: '0 -1px 4px rgba(0,0,0,0.06)', marginBottom: 0 }}>
+          {MARKS.map(({ mark, label, extraStyle }) => (
+            <button
+              key={mark}
+              onMouseDown={e => {
+                e.preventDefault()
+                if (mark === 'bold') editor.chain().focus().toggleBold().run()
+                else if (mark === 'italic') editor.chain().focus().toggleItalic().run()
+                else editor.chain().focus().toggleUnderline().run()
+              }}
+              style={{
+                fontFamily: "'DM Mono', monospace",
+                fontSize: 11,
+                padding: '4px 10px',
+                border: 'none',
+                borderRight: '1px solid #d4d0cb',
+                cursor: 'pointer',
+                lineHeight: 1,
+                background: editor.isActive(mark) ? '#1a1a1a' : 'transparent',
+                color: editor.isActive(mark) ? '#fff' : '#8a7e78',
+                ...extraStyle,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {editing ? (
+        <EditorContent editor={editor} />
+      ) : (
+        <div
+          onClick={() => setEditing(true)}
+          style={{
+            fontFamily: "'DM Mono', monospace",
+            fontSize: 11,
+            color: value ? '#1a1a1a' : '#b0a8a0',
+            fontStyle: value ? 'normal' : 'italic',
+            padding: '5px 7px',
+            border: '1px solid transparent',
+            cursor: 'text',
+            lineHeight: 1.6,
+            minHeight: 120,
+            background: 'transparent',
+          }}
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={value ? { __html: value } : undefined}
+        >
+          {!value && (placeholder || '—')}
+        </div>
+      )}
     </div>
   )
 }
