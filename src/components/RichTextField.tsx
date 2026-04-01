@@ -10,6 +10,17 @@ export interface RichTextFieldProps {
   placeholder?: string
 }
 
+// Convert legacy plain-text (newlines) to Tiptap-compatible HTML.
+// Already-HTML values (from WYSIWYG saves) pass through unchanged.
+function toHTML(value: string): string {
+  if (!value) return ''
+  if (value.trimStart().startsWith('<')) return value
+  return value
+    .split('\n\n')
+    .map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`)
+    .join('')
+}
+
 export default function RichTextField({ value, onChange, placeholder: _placeholder }: RichTextFieldProps) {
   // Keep onBlur handler current without triggering re-creation of useEditor
   const onChangeRef = useRef(onChange)
@@ -20,7 +31,7 @@ export default function RichTextField({ value, onChange, placeholder: _placehold
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [StarterKit, Underline],
-    content: value,
+    content: toHTML(value),
     editorProps: {
       attributes: {
         style: [
@@ -51,8 +62,8 @@ export default function RichTextField({ value, onChange, placeholder: _placehold
     if (!editor || editor.isFocused) return
     const current = editor.getHTML()
     const normCurrent = current === '<p></p>' ? '' : current
-    if (normCurrent !== value) {
-      editor.commands.setContent(value || '', { emitUpdate: false })
+    if (normCurrent !== toHTML(value)) {
+      editor.commands.setContent(toHTML(value), { emitUpdate: false })
     }
   }, [value, editor])
 
