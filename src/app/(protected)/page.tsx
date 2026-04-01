@@ -188,6 +188,7 @@ function RichTextField({
   const [editing, setEditing] = useState(false)
 
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [StarterKit, Underline],
     content: value,
     editorProps: {
